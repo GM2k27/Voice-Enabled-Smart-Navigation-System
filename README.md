@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+## Smart Nav Web
+
+Voice-driven navigation UI inspired by the Android Smart Nav app, rebuilt with **Next.js 14**, **React**, **Tailwind CSS**, and **Leaflet**. Speak commands like “Navigate to London” and the page:
+
+- Listens via the browser’s Web Speech API
+- Parses destinations with the same Kotlin logic (saved shortcuts + “navigate to …” phrases)
+- Geocodes through OpenStreetMap’s Nominatim endpoint
+- Shows the destination on an interactive Leaflet map with animated fly-to and popups
+
+### Preview
+
+![Smart Nav preview](public/window.svg)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# install dependencies
+npm install
+
+# run locally
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in a Chromium-based browser (Chrome recommended). Click the glowing microphone button, say “Navigate to Market”, and watch the map jump to that location.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+  app/
+    page.js      # React component containing UI, speech logic, Leaflet hooks
+    globals.css  # Tailwind imports + glassmorphism theme + Leaflet CSS import
+public/          # Icons/SVG preview assets
+```
 
-## Learn More
+Key root files:
 
-To learn more about Next.js, take a look at the following resources:
+- `package.json` – scripts/dependencies (Next.js 16, React 19, Tailwind v4)
+- `postcss.config.mjs` – Tailwind/PostCSS pipeline
+- `next.config.mjs` – standard Next.js config
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Notes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Works best in Chrome/Edge; Firefox lacks full Web Speech support.
+- Geocoding relies on the public Nominatim API—respect rate limits or self-host for production.
+- No secrets live in the repo; keep future API keys in environment variables.
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT. Feel free to fork, extend, and open PRs!***
