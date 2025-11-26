@@ -1,269 +1,468 @@
+// "use client";
+
+// import { useCallback, useEffect, useRef, useState } from "react";
+// import { api } from "@/lib/api";
+// import toast, { Toaster } from "react-hot-toast";
+// import Layout from "@/components/Layout";
+// import GoogleMapView from "@/components/GoogleMapView";
+
+// const navigationPatterns = ["navigate to", "go to", "take me to", "directions to"];
+
+// function normalizeText(str = "") {
+//   return str
+//     .toLowerCase()
+//     .replace(/[^\w\s]/g, "")
+//     .replace(/\s+/g, " ")
+//     .trim();
+// }
+
+// async function extractLocation(spokenRaw = "") {
+//   const spoken = spokenRaw.toLowerCase().trim();
+//   const normalizedSpoken = normalizeText(spoken);
+
+//   // -------------------------------
+//   // 1) MAGIC PHRASE (Backend)
+//   // -------------------------------
+//   try {
+//     const result = await api.findPhraseMatch({ phrase: spoken });
+
+//     if (result?.status === "success" && result?.data?.target_location_id) {
+//       const loc = await api.getLocation(result.data.target_location_id);
+
+//       if (loc.status === "success") {
+//         return {
+//           type: "magic_phrase",
+//           location: loc.data,
+//           label: loc.data.location_name,
+//         };
+//       }
+//     }
+//   } catch (err) {
+//     console.error("Magic match error:", err);
+//   }
+
+//   // -------------------------------
+//   // 2) Saved Location Match (exact)
+//   // -------------------------------
+//   try {
+//     const loc = await api.findLocationByName(spoken);
+//     if (loc?.id) {
+//       return { type: "saved_location", location: loc, label: loc.location_name };
+//     }
+
+//     const locNorm = await api.findLocationByName(normalizedSpoken);
+//     if (locNorm?.id) {
+//       return { type: "saved_location", location: locNorm, label: locNorm.location_name };
+//     }
+//   } catch (err) {}
+
+//   // -------------------------------
+//   // 3) Partial DB Search
+//   // -------------------------------
+//   try {
+//     const search = await api.searchLocations(spoken);
+//     if (Array.isArray(search?.data) && search.data.length > 0) {
+//       return { type: "saved_location", location: search.data[0], label: search.data[0].location_name };
+//     }
+//   } catch (err) {}
+
+//   // -------------------------------
+//   // 4) “navigate to ___”
+//   // -------------------------------
+//   for (const pattern of navigationPatterns) {
+//     if (spoken.includes(pattern)) {
+//       const destination = spoken.slice(spoken.indexOf(pattern) + pattern.length).trim();
+//       if (destination.length > 0) {
+//         return { type: "geocode", query: destination, label: destination };
+//       }
+//     }
+//   }
+
+//   return null;
+// }
+
+// // ---------------------------------
+// // Simple Geocode Fallback
+// // ---------------------------------
+// async function geocodeLocation(query) {
+//   const res = await fetch(
+//     `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`
+//   );
+//   const [data] = await res.json();
+//   if (!data) throw new Error("No location found");
+
+//   return {
+//     lat: parseFloat(data.lat),
+//     lon: parseFloat(data.lon),
+//     label: data.display_name || query,
+//   };
+// }
+
+// export default function Page() {
+//   const [status, setStatus] = useState("Say something…");
+//   const [transcript, setTranscript] = useState("");
+//   const [coords, setCoords] = useState(null);
+//   const [label, setLabel] = useState("");
+//   const [isListening, setIsListening] = useState(false);
+//   const [hasSupport, setHasSupport] = useState(true);
+
+//   const recognitionRef = useRef(null);
+
+//   // ---------------------------------
+//   // SHOW LOCATION ON GOOGLE MAP
+//   // ---------------------------------
+//   const showLocationOnMap = useCallback(async (data) => {
+//     try {
+//       let lat, lon, name;
+
+//       if (data.type === "magic_phrase" || data.type === "saved_location") {
+//         lat = Number(data.location.latitude);
+//         lon = Number(data.location.longitude);
+//         name = data.label;
+//       } else {
+//         const geo = await geocodeLocation(data.query);
+//         lat = geo.lat;
+//         lon = geo.lon;
+//         name = geo.label;
+//       }
+
+//       setCoords({ lat, lng: lon });
+//       setLabel(name);
+
+//       setStatus(`Showing: ${name}`);
+//       toast.success(`Navigating to ${name}`);
+//     } catch (err) {
+//       console.error(err);
+//       toast.error("Unable to display location");
+//     }
+//   }, []);
+
+//   // ---------------------------------
+//   // SPEECH RECOGNIZER SETUP
+//   // ---------------------------------
+//   const setupSpeech = useCallback(() => {
+//     if (recognitionRef.current) return true;
+
+//     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+//     if (!SpeechRecognition) {
+//       setHasSupport(false);
+//       setStatus("Speech API not supported");
+//       return false;
+//     }
+
+//     const rec = new SpeechRecognition();
+//     rec.lang = "en-US";
+//     rec.interimResults = false;
+
+//     rec.onstart = () => setIsListening(true);
+//     rec.onend = () => setIsListening(false);
+
+//     rec.onresult = async (e) => {
+//       const spoken = e.results[0][0].transcript;
+//       setTranscript(spoken);
+
+//       setStatus("Processing...");
+//       const loc = await extractLocation(spoken);
+//       if (loc) showLocationOnMap(loc);
+//       else toast.error("Location not recognized");
+//     };
+
+//     recognitionRef.current = rec;
+//     return true;
+//   }, [showLocationOnMap]);
+
+//   const toggleListening = () => {
+//     if (!setupSpeech()) return;
+
+//     const rec = recognitionRef.current;
+//     if (isListening) rec.stop();
+//     else rec.start();
+//   };
+
+//   return (
+//     <Layout>
+//       <Toaster />
+//       <div className="flex min-h-screen items-center justify-center p-10">
+//         <div className="glass-panel max-w-4xl w-full p-10 rounded-[32px] text-white space-y-8">
+
+//           <header className="text-center space-y-2">
+//             <h1 className="text-3xl font-bold">Voice Navigation Assistant</h1>
+//             <p className="text-slate-300">Tap the mic and speak a command</p>
+//           </header>
+
+//           <section>
+//             <p className="text-xs uppercase tracking-widest text-slate-400">Status</p>
+//             <div className="mt-2 rounded-xl bg-slate-900/70 px-4 py-2">
+//               {status}
+//             </div>
+//           </section>
+
+//           <section>
+//             <p className="text-xs uppercase tracking-widest text-slate-400">Transcript</p>
+//             <div className="mt-2 rounded-xl bg-slate-900/70 px-4 py-2 min-h-[70px]">
+//               {transcript || "Your words will appear here..."}
+//             </div>
+//           </section>
+
+//           <section className="h-80 rounded-2xl overflow-hidden border border-white/10">
+//             <GoogleMapView coords={coords} label={label} />
+//           </section>
+
+//           <div className="flex flex-col items-center">
+//             <button
+//               onClick={toggleListening}
+//               className="h-20 w-20 rounded-full bg-emerald-400 text-black font-semibold shadow-lg"
+//             >
+//               {isListening ? "Stop" : "Start"}
+//             </button>
+//             <p className="text-slate-400 mt-2">
+//               {isListening ? "Listening..." : "Tap to speak"}
+//             </p>
+//           </div>
+
+//         </div>
+//       </div>
+//     </Layout>
+//   );
+// }
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
+import toast, { Toaster } from "react-hot-toast";
+import Layout from "@/components/Layout";
 
-const savedLocations = ["Home", "Office", "Hospital", "Police Station", "Market"];
 const navigationPatterns = ["navigate to", "go to", "take me to", "directions to"];
 
-function extractLocation(text = "") {
-  const spoken = text.toLowerCase().trim();
+function normalizeText(str = "") {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  for (const location of savedLocations) {
-    if (spoken === location.toLowerCase()) {
-      return location;
+async function extractLocation(spokenRaw = "") {
+  const spoken = spokenRaw.toLowerCase().trim();
+  const normalizedSpoken = normalizeText(spoken);
+
+  // -------------------------------
+  // 1) MAGIC PHRASE CHECK (Corrected)
+  // -------------------------------
+  try {
+    const phraseMatch = await api.findPhraseMatch({ phrase: spoken });
+    if (
+      phraseMatch &&
+      phraseMatch.status === "success" &&
+      phraseMatch.data &&
+      phraseMatch.data.target_location_id
+    ) {
+      const loc = await api.getLocation(phraseMatch.data.target_location_id);
+      if (loc && loc.status === "success" && loc.data) {
+        return {
+          type: "magic_phrase",
+          location: loc.data,
+          label: loc.data.location_name,
+        };
+      }
     }
+  } catch (error) {
+    console.error("Magic phrase check error:", error);
   }
 
-  for (const pattern of navigationPatterns) {
-    if (spoken.startsWith(pattern)) {
-      const destination = spoken.slice(pattern.length).trim();
-      if (destination.length) {
-        return destination;
+  // -------------------------------
+  // 2) Exact saved location match
+  // -------------------------------
+  try {
+    const loc = await api.findLocationByName(spoken);
+    if (loc && loc.id) {
+      return { type: "saved_location", location: loc, label: loc.location_name };
+    }
+
+    const locNorm = await api.findLocationByName(normalizedSpoken);
+    if (locNorm && locNorm.id) {
+      return { type: "saved_location", location: locNorm, label: locNorm.location_name };
+    }
+  } catch (err) { }
+
+  // -------------------------------
+  // 3) Partial search in DB (keyword search)
+  // -------------------------------
+  try {
+    const res = await api.searchLocations(spoken);
+    if (Array.isArray(res?.data) && res.data.length > 0) {
+      return { type: "saved_location", location: res.data[0], label: res.data[0].location_name };
+    }
+  } catch (err) { }
+
+  // -------------------------------
+  // 4) Check for phrases like “navigate to X”
+  // -------------------------------
+  for (const p of navigationPatterns) {
+    if (spoken.includes(p)) {
+      const destination = spoken.slice(spoken.indexOf(p) + p.length).trim();
+      if (destination.length > 0) {
+        return { type: "geocode", query: destination, label: destination };
       }
     }
   }
 
-  return "";
+  return null;
 }
 
-const mapDefaults = {
-  center: [20, 0],
-  zoom: 2,
-};
-
 async function geocodeLocation(query) {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`
-  );
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+    query
+  )}&limit=1`;
 
-  if (!response.ok) {
-    throw new Error("Failed to reach geocoding service.");
-  }
+  const res = await fetch(url);
+  const [data] = await res.json();
 
-  const [result] = await response.json();
-  if (!result) {
-    throw new Error("No matching location found.");
-  }
+  if (!data) throw new Error("Location not found");
 
   return {
-    lat: parseFloat(result.lat),
-    lon: parseFloat(result.lon),
-    label: result.display_name || query,
+    lat: parseFloat(data.lat),
+    lon: parseFloat(data.lon),
+    label: data.display_name || query,
   };
 }
 
-const errorMessages = {
-  audio_capture: "Error: Unclear audio.",
-  network: "Error: Network issues.",
-  no_speech: "Error: No speech input.",
-  nomatch: "Error: Speech not recognized.",
-};
-
 export default function Page() {
-  const [status, setStatus] = useState("Idle");
+  const [status, setStatus] = useState("Say something…");
   const [transcript, setTranscript] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [hasSupport, setHasSupport] = useState(true);
-  const [isMapReady, setIsMapReady] = useState(false);
 
   const recognitionRef = useRef(null);
-  const mapContainerRef = useRef(null);
+
+  // MAP
   const mapRef = useRef(null);
   const leafletRef = useRef(null);
   const markerRef = useRef(null);
+  const mapContainerRef = useRef(null);
 
   const initializeMap = useCallback(async () => {
     if (mapRef.current) return true;
-    if (typeof window === "undefined") return false;
-    if (!mapContainerRef.current) return false;
 
     const L = await import("leaflet");
     leafletRef.current = L;
 
     mapRef.current = L.map(mapContainerRef.current, {
-      center: mapDefaults.center,
-      zoom: mapDefaults.zoom,
+      center: [20, 0],
+      zoom: 2,
       zoomControl: false,
     });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(mapRef.current);
-
-    setIsMapReady(true);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapRef.current);
     return true;
   }, []);
 
   const showLocationOnMap = useCallback(
-    async (query) => {
+    async (locData) => {
       try {
-        setStatus(`Finding ${query} on the map...`);
-        const mapIsReady = await initializeMap();
-        if (!mapIsReady || !mapRef.current || !leafletRef.current) {
-          throw new Error("Map is not available.");
-        }
+        await initializeMap();
 
-        const { lat, lon, label } = await geocodeLocation(query);
-        const coords = [lat, lon];
+        let lat, lon, label;
 
-        mapRef.current.setView(coords, 14, { animate: true });
-
-        if (!markerRef.current) {
-          markerRef.current = leafletRef.current.marker(coords).addTo(mapRef.current);
+        if (locData.type === "magic_phrase" || locData.type === "saved_location") {
+          const l = locData.location;
+          lat = Number(l.latitude);
+          lon = Number(l.longitude);
+          label = l.location_name;
         } else {
-          markerRef.current.setLatLng(coords);
+          const geo = await geocodeLocation(locData.query);
+          lat = geo.lat;
+          lon = geo.lon;
+          label = geo.label;
         }
 
-        markerRef.current.bindPopup(label).openPopup();
+        if (!isFinite(lat) || !isFinite(lon)) throw new Error("Invalid coordinates");
+
+        mapRef.current.setView([lat, lon], 14);
+
+        if (!markerRef.current)
+          markerRef.current = leafletRef.current.marker([lat, lon]).addTo(mapRef.current);
+        else markerRef.current.setLatLng([lat, lon]);
+
+        markerRef.current.bindPopup(`<b>${label}</b>`).openPopup();
+
         setStatus(`Showing: ${label}`);
-      } catch (error) {
-        setStatus(error.message || "Unable to display that location.");
+        toast.success(`Navigating to ${label}`);
+      } catch (err) {
+        console.error(err);
+        toast.error("Cannot show location");
       }
     },
     [initializeMap]
   );
 
+  // SPEECH
   const ensureRecognizer = useCallback(() => {
     if (recognitionRef.current) return true;
-    if (typeof window === "undefined") return false;
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       setHasSupport(false);
-      setStatus("Web Speech API not supported in this browser.");
+      setStatus("Speech recognition not supported");
       return false;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.maxAlternatives = 1;
-    recognition.interimResults = false;
+    const rec = new SpeechRecognition();
+    rec.lang = "en-US";
+    rec.interimResults = false;
 
-    recognition.onstart = () => {
-      setIsListening(true);
-      setStatus("Listening...");
+    rec.onstart = () => setIsListening(true);
+    rec.onend = () => setIsListening(false);
+
+    rec.onresult = async (e) => {
+      const text = e.results[0][0].transcript;
+      setTranscript(text);
+      setStatus("Processing…");
+
+      const loc = await extractLocation(text);
+      if (loc) showLocationOnMap(loc);
+      else toast.error("Location not recognized");
     };
 
-    recognition.onend = () => {
-      setIsListening(false);
-      setStatus((prev) => (prev.startsWith("Showing") ? prev : "Processing..."));
-    };
-
-    recognition.onerror = (event) => {
-      setIsListening(false);
-      setStatus(errorMessages[event.error] || "An unknown error occurred.");
-    };
-
-    recognition.onresult = (event) => {
-      const resultText = event.results[0][0].transcript;
-      setTranscript(resultText);
-
-      const location = extractLocation(resultText);
-
-      if (location) {
-        showLocationOnMap(location);
-      } else {
-        setStatus("Location not recognized. Try 'Home' or 'Navigate to London'.");
-      }
-    };
-
-    recognitionRef.current = recognition;
+    recognitionRef.current = rec;
     return true;
   }, [showLocationOnMap]);
 
-  useEffect(() => {
-    initializeMap();
-  }, [initializeMap]);
-
-  useEffect(() => {
-    return () => recognitionRef.current?.stop();
-  }, []);
-
-  const toggleListening = useCallback(() => {
-    if (!hasSupport) return;
+  const toggleListening = () => {
     if (!ensureRecognizer()) return;
 
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-
-    if (isListening) {
-      recognition.stop();
-      setStatus("Idle");
-      return;
-    }
-
-    try {
-      recognition.start();
-    } catch {
-      // start() may throw if invoked before a previous session fully stops
-    }
-  }, [ensureRecognizer, hasSupport, isListening]);
-
-  const buttonLabel = hasSupport ? (isListening ? "Stop Listening" : "Start Listening") : "Not Supported";
+    const rec = recognitionRef.current;
+    if (isListening) rec.stop();
+    else rec.start();
+  };
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="glass-panel w-full max-w-4xl space-y-8 rounded-[32px] p-10 text-white">
-        <header className="space-y-2 text-center">
-          <p className="text-sm uppercase tracking-[0.4em] text-emerald-300">Smart Nav</p>
-          <h1 className="text-4xl font-semibold">Voice Navigation Assistant</h1>
-          <p className="text-sm text-slate-300">Tap the mic and say “Navigate to Market”.</p>
-        </header>
+    <Layout>
+      <Toaster />
+      <div className="flex min-h-screen items-center justify-center px-4 py-10">
+        <div className="glass-panel w-full max-w-4xl rounded-[32px] p-10 text-white space-y-6">
+          <h1 className="text-3xl font-bold">Voice Navigation Assistant</h1>
 
-        <section className="grid gap-6 md:grid-cols-2">
-          <article className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Status</p>
-            <div className="mt-3 inline-flex items-center rounded-full bg-slate-900/70 px-4 py-2 text-sm font-semibold text-emerald-300">
-              <span className="mr-2 inline-flex h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
-              {status}
-            </div>
-          </article>
+          <p>Status: {status}</p>
+          <p>Transcript: {transcript}</p>
 
-          <article className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Transcript</p>
-            <div className="mt-3 min-h-[110px] rounded-2xl bg-slate-950/70 p-4 text-left text-base text-white">
-              {transcript ? transcript : <span className="text-slate-500">Your transcript will appear here…</span>}
-            </div>
-          </article>
-        </section>
+          <div
+            ref={mapContainerRef}
+            className="h-80 w-full border border-white/20 rounded-xl bg-slate-900"
+          />
 
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
-          <div className="flex flex-col gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Live Map</p>
-              <p className="text-sm text-slate-300">Powered by Leaflet & OpenStreetMap</p>
-            </div>
-            <div
-              ref={mapContainerRef}
-              className="h-80 w-full overflow-hidden rounded-2xl border border-white/10 bg-slate-950/50"
-            >
-              {!isMapReady && (
-                <div className="flex h-full items-center justify-center text-sm text-slate-400">
-                  Preparing map…
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <div className="flex flex-col items-center gap-4">
           <button
-            type="button"
             onClick={toggleListening}
-            disabled={!hasSupport}
-            className={`grid h-28 w-28 place-items-center rounded-full border border-emerald-300/60 bg-gradient-to-br from-emerald-400 to-emerald-500 text-slate-900 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:border-slate-600 disabled:from-slate-600 disabled:to-slate-500 ${
-              isListening ? "shadow-[0_0_45px_rgba(16,185,129,0.7)]" : ""
-            }`}
+            className="px-6 py-3 bg-emerald-500 rounded-xl text-black font-bold"
           >
-            <svg className="h-11 w-11" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <path d="M12 16a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v7a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zM11 19v3h2v-3h-2z" />
-            </svg>
+            {isListening ? "Stop" : "Start Listening"}
           </button>
-          <p className="text-sm text-slate-400">{buttonLabel}</p>
         </div>
       </div>
-    </main>
+    </Layout>
   );
 }

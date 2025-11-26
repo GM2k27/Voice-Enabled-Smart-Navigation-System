@@ -1,0 +1,239 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
+import toast, { Toaster } from "react-hot-toast";
+import Layout from "@/components/Layout";
+
+const navigationPatterns = ["navigate to", "go to", "take me to", "directions to"];
+
+function normalizeText(str = "") {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function extractLocation(spokenRaw = "") {
+  const spoken = spokenRaw.toLowerCase().trim();
+  const normalizedSpoken = normalizeText(spoken);
+
+  // -------------------------------
+  // 1) MAGIC PHRASE CHECK (Corrected)
+  // -------------------------------
+  try {
+    const phraseMatch = await api.findPhraseMatch({ phrase: spoken });
+    if (
+      phraseMatch &&
+      phraseMatch.status === "success" &&
+      phraseMatch.data &&
+      phraseMatch.data.target_location_id
+    ) {
+      const loc = await api.getLocation(phraseMatch.data.target_location_id);
+      if (loc && loc.status === "success" && loc.data) {
+        return {
+          type: "magic_phrase",
+          location: loc.data,
+          label: loc.data.location_name,
+        };
+      }
+    }
+  } catch (error) {
+    console.error("Magic phrase check error:", error);
+  }
+
+  // -------------------------------
+  // 2) Exact saved location match
+  // -------------------------------
+  try {
+    const loc = await api.findLocationByName(spoken);
+    if (loc && loc.id) {
+      return { type: "saved_location", location: loc, label: loc.location_name };
+    }
+
+    const locNorm = await api.findLocationByName(normalizedSpoken);
+    if (locNorm && locNorm.id) {
+      return { type: "saved_location", location: locNorm, label: locNorm.location_name };
+    }
+  } catch (err) { }
+
+  // -------------------------------
+  // 3) Partial search in DB (keyword search)
+  // -------------------------------
+  try {
+    const res = await api.searchLocations(spoken);
+    if (Array.isArray(res?.data) && res.data.length > 0) {
+      return { type: "saved_location", location: res.data[0], label: res.data[0].location_name };
+    }
+  } catch (err) { }
+
+  // -------------------------------
+  // 4) Check for phrases like “navigate to X”
+  // -------------------------------
+  for (const p of navigationPatterns) {
+    if (spoken.includes(p)) {
+      const destination = spoken.slice(spoken.indexOf(p) + p.length).trim();
+      if (destination.length > 0) {
+        return { type: "geocode", query: destination, label: destination };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function geocodeLocation(query) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+    query
+  )}&limit=1`;
+
+  const res = await fetch(url);
+  const [data] = await res.json();
+
+  if (!data) throw new Error("Location not found");
+
+  return {
+    lat: parseFloat(data.lat),
+    lon: parseFloat(data.lon),
+    label: data.display_name || query,
+  };
+}
+
+export default function Page() {
+  const [status, setStatus] = useState("Say something…");
+  const [transcript, setTranscript] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [hasSupport, setHasSupport] = useState(true);
+
+  const recognitionRef = useRef(null);
+
+  // MAP
+  const mapRef = useRef(null);
+  const leafletRef = useRef(null);
+  const markerRef = useRef(null);
+  const mapContainerRef = useRef(null);
+
+  const initializeMap = useCallback(async () => {
+    if (mapRef.current) return true;
+
+    const L = await import("leaflet");
+    leafletRef.current = L;
+
+    mapRef.current = L.map(mapContainerRef.current, {
+      center: [20, 0],
+      zoom: 2,
+      zoomControl: false,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapRef.current);
+    return true;
+  }, []);
+
+  const showLocationOnMap = useCallback(
+    async (locData) => {
+      try {
+        await initializeMap();
+
+        let lat, lon, label;
+
+        if (locData.type === "magic_phrase" || locData.type === "saved_location") {
+          const l = locData.location;
+          lat = Number(l.latitude);
+          lon = Number(l.longitude);
+          label = l.location_name;
+        } else {
+          const geo = await geocodeLocation(locData.query);
+          lat = geo.lat;
+          lon = geo.lon;
+          label = geo.label;
+        }
+
+        if (!isFinite(lat) || !isFinite(lon)) throw new Error("Invalid coordinates");
+
+        mapRef.current.setView([lat, lon], 14);
+
+        if (!markerRef.current)
+          markerRef.current = leafletRef.current.marker([lat, lon]).addTo(mapRef.current);
+        else markerRef.current.setLatLng([lat, lon]);
+
+        markerRef.current.bindPopup(`<b>${label}</b>`).openPopup();
+
+        setStatus(`Showing: ${label}`);
+        toast.success(`Navigating to ${label}`);
+      } catch (err) {
+        console.error(err);
+        toast.error("Cannot show location");
+      }
+    },
+    [initializeMap]
+  );
+
+  // SPEECH
+  const ensureRecognizer = useCallback(() => {
+    if (recognitionRef.current) return true;
+
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setHasSupport(false);
+      setStatus("Speech recognition not supported");
+      return false;
+    }
+
+    const rec = new SpeechRecognition();
+    rec.lang = "en-US";
+    rec.interimResults = false;
+
+    rec.onstart = () => setIsListening(true);
+    rec.onend = () => setIsListening(false);
+
+    rec.onresult = async (e) => {
+      const text = e.results[0][0].transcript;
+      setTranscript(text);
+      setStatus("Processing…");
+
+      const loc = await extractLocation(text);
+      if (loc) showLocationOnMap(loc);
+      else toast.error("Location not recognized");
+    };
+
+    recognitionRef.current = rec;
+    return true;
+  }, [showLocationOnMap]);
+
+  const toggleListening = () => {
+    if (!ensureRecognizer()) return;
+
+    const rec = recognitionRef.current;
+    if (isListening) rec.stop();
+    else rec.start();
+  };
+
+  return (
+    <Layout>
+      <Toaster />
+      <div className="flex min-h-screen items-center justify-center px-4 py-10">
+        <div className="glass-panel w-full max-w-4xl rounded-[32px] p-10 text-white space-y-6">
+          <h1 className="text-3xl font-bold">Voice Navigation Assistant</h1>
+
+          <p>Status: {status}</p>
+          <p>Transcript: {transcript}</p>
+
+          <div
+            ref={mapContainerRef}
+            className="h-80 w-full border border-white/20 rounded-xl bg-slate-900"
+          />
+
+          <button
+            onClick={toggleListening}
+            className="px-6 py-3 bg-emerald-500 rounded-xl text-black font-bold"
+          >
+            {isListening ? "Stop" : "Start Listening"}
+          </button>
+        </div>
+      </div>
+    </Layout>
+  );
+}
