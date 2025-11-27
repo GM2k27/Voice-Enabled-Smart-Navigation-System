@@ -1,114 +1,97 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 class ApiClient {
   async request(endpoint, options = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${BASE}${endpoint}`;
     const config = {
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...options.headers,
       },
       ...options,
     };
 
-    if (config.body && typeof config.body === 'object') {
+    if (config.body && typeof config.body === "object") {
       config.body = JSON.stringify(config.body);
     }
 
-    try {
-      const response = await fetch(url, config);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Request failed');
-      }
-      
-      return data;
-    } catch (error) {
-      throw error;
-    }
+    const res = await fetch(url, config);
+    const data = await res.json();
+    return data;
   }
 
-  // Location endpoints
+  // 🔥 CORRECT BACKEND ROUTES
+
+  // Get ALL locations
   async getLocations() {
-    return this.request('/locations');
+    return this.request("/locations");
   }
 
+  // Get location by ID
   async getLocation(id) {
     return this.request(`/locations/${id}`);
   }
 
+  // Add new location
   async createLocation(location) {
-    return this.request('/locations', {
-      method: 'POST',
+    return this.request("/locations", {
+      method: "POST",
       body: location,
     });
   }
 
+  // Update location
   async updateLocation(id, location) {
     return this.request(`/locations/${id}`, {
-      method: 'PUT',
+      method: "PUT",
       body: location,
     });
   }
 
+  // Delete location
   async deleteLocation(id) {
     return this.request(`/locations/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
+  // 🔥 SEARCH using backend
   async searchLocations(query) {
-    // For now, we'll filter on the frontend, but this could be a backend endpoint
-    const result = await this.getLocations();
-    if (!query) return result;
-    
-    const searchLower = query.toLowerCase();
-    const filtered = result.data.filter(loc => 
-      loc.location_name.toLowerCase().includes(searchLower) ||
-      loc.tags.some(tag => tag.toLowerCase().includes(searchLower))
-    );
-    
-    return { ...result, data: filtered };
+    return this.request(`/locations/search/${encodeURIComponent(query)}`);
   }
 
-  // Magic phrase endpoints
+  // 🔥 FIND by name using backend
+  async findLocationByName(name) {
+    return this.request(`/locations/name/${encodeURIComponent(name)}`);
+  }
+
+  // -------------------------------
+  // MAGIC PHRASES (unchanged)
+  // -------------------------------
   async getPhrases() {
-    return this.request('/phrases');
+    return this.request("/phrases");
   }
 
   async createPhrase(phrase) {
-    return this.request('/phrases', {
-      method: 'POST',
+    return this.request("/phrases", {
+      method: "POST",
       body: phrase,
     });
   }
 
   async deletePhrase(id) {
     return this.request(`/phrases/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
-  // Voice search integration
+  // Match spoken phrase
   async findPhraseMatch({ phrase }) {
     return this.request("/phrases/match", {
       method: "POST",
       body: { phrase },
     });
   }
-
-  async findLocationByName(name) {
-    const locations = await this.getLocations();
-    const normalized = name.toLowerCase().trim();
-    
-    const match = locations.data.find(loc => 
-      loc.location_name.toLowerCase() === normalized
-    );
-    
-    return match || null;
-  }
 }
 
 export const api = new ApiClient();
-

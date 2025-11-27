@@ -7,6 +7,7 @@ Built using modern web technologies including **Next.js**, **React**, **Express*
 ## Features
 
 - 🎤 **Voice Navigation**: Use spoken commands to navigate to saved or custom locations
+- 🤖 **AI Assistance**: Voice-powered AI chatbot for travel queries and general assistance
 - 📍 **Location Management**: Full CRUD interface for user-defined locations with geo-coordinates and tags
 - ✨ **Magic Phrases**: Custom voice commands mapped to navigation actions for quick access
 - 🗺️ **Interactive Maps**: Map interface powered by Leaflet with dynamic markers
@@ -32,7 +33,6 @@ VESNS/
 │   └── lib/                 # Utility libraries such as API client
 └── public/                  # Static assets like images and icons
 ```
-└── public/                  # Static assets like images and icons
 
 ## Prerequisites
 
@@ -173,6 +173,14 @@ The system will:
    - Phrase (exact match for voice command)
    - Target Location (select from saved locations)
 4. When the phrase is spoken, it will navigate to the target location
+
+### AI Assistance
+
+1. Navigate to the home page (`/`)
+2. Click the "🎤 Ask AI" button
+3. Speak your question or request (e.g., "What's the weather like in Paris?", "Suggest places to visit in Tokyo")
+4. The AI will respond with voice and display a popup with the answer
+5. The navigation voice recognition will resume after the AI response
 
 ## Database Schema
 

@@ -4,6 +4,9 @@ const cors = require('cors');
 const locationRoutes = require('./routes/locationRoutes');
 const phraseRoutes = require('./routes/phraseRoutes');
 const apiRoutes = require('./routes/apiRoutes');
+//apenai
+const aiRoutes = require('./routes/aiRoutes');
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,6 +25,7 @@ app.get('/health', (req, res) => {
 app.use('/locations', locationRoutes);
 app.use('/phrases', phraseRoutes);
 app.use('/api', apiRoutes);
+app.use('/ai', aiRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

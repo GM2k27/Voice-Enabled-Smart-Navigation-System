@@ -17,7 +17,13 @@ export default function LocationsPage() {
   const fetchLocations = async () => {
     try {
       setLoading(true);
-      const result = await api.searchLocations(searchQuery);
+
+      // ⭐ FIX: If search is empty → load ALL locations
+      const result =
+        searchQuery.trim() === ""
+          ? await api.getLocations()
+          : await api.searchLocations(searchQuery);
+
       setLocations(result.data || []);
     } catch (error) {
       toast.error(error.message || 'Failed to fetch locations');
@@ -25,6 +31,7 @@ export default function LocationsPage() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchLocations();
