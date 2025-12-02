@@ -2,42 +2,33 @@ const MagicPhrase = require('../models/MagicPhrase');
 const Location = require('../models/Location');
 
 class PhraseService {
-  static async createPhrase(data) {
-    // Validate required fields
-    if (!data.phrase) {
-      throw new Error('phrase is required');
-    }
+  static async createPhrase(data, userId) {
+    if (!data.phrase) throw new Error('phrase is required');
+    if (!data.target_location_id) throw new Error('target_location_id is required');
 
-    if (!data.target_location_id) {
-      throw new Error('target_location_id is required');
-    }
-
-    // Validate action_type
-    if (data.action_type && data.action_type !== 'navigate') {
-      throw new Error('action_type must be "navigate"');
-    }
-
-    // Verify target location exists
-    const location = await Location.findById(data.target_location_id);
+    // Verify location belongs to user
+    const location = await Location.findById(data.target_location_id, userId);
     if (!location) {
       throw new Error('Target location not found');
     }
 
-    // Check for duplicate phrase
-    const existing = await MagicPhrase.findByPhrase(data.phrase);
+    // Check duplicates for this user only
+    const existing = await MagicPhrase.findByPhrase(data.phrase, userId);
     if (existing) {
       throw new Error('Magic phrase already exists');
     }
 
+    // INSERT with userId 🔥
     return await MagicPhrase.create({
       phrase: data.phrase.trim(),
       action_type: data.action_type || 'navigate',
       target_location_id: data.target_location_id,
-    });
+    }, userId);
   }
 
-  static async getAllPhrases() {
-    return await MagicPhrase.findAll();
+
+  static async getAllPhrases(userId) {
+    return await MagicPhrase.findAll(userId);
   }
 
   static async getPhraseById(id) {
@@ -48,17 +39,24 @@ class PhraseService {
     return phrase;
   }
 
-  static async deletePhrase(id) {
-    const phrase = await MagicPhrase.findById(id);
-    if (!phrase) {
-      throw new Error('Magic phrase not found');
-    }
-    return await MagicPhrase.delete(id);
+  static async deletePhrase(id, userId) {
+    const phrase = await MagicPhrase.findById(id, userId);
+    if (!phrase) throw new Error('Magic phrase not found');
+    return await MagicPhrase.delete(id, userId);
   }
 
-  static async findPhraseMatch(spokenText) {
-  return await MagicPhrase.findByPhrase(spokenText.toLowerCase().trim());
-}
+
+  static async findPhraseMatch(spokenText, userId) {
+    const cleaned = spokenText.toLowerCase().trim();
+    console.log("🔎 findPhraseMatch input:", { cleaned, userId });
+
+    const match = await MagicPhrase.findByPhrase(cleaned, userId);
+
+    console.log("✅ DB match result:", match);
+
+    return match;
+  }
+
 
 }
 

@@ -1,6 +1,24 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 class ApiClient {
+  constructor() {
+    this.token = null;
+
+    // Load token if already logged in
+    if (typeof window !== "undefined") {
+      const savedToken = localStorage.getItem("vesns_token");
+      if (savedToken) this.token = savedToken;
+    }
+  }
+
+  // Save token globally
+  setToken(token) {
+    this.token = token;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("vesns_token", token);
+    }
+  }
+
   async request(endpoint, options = {}) {
     const url = `${BASE}${endpoint}`;
     const config = {
@@ -11,6 +29,12 @@ class ApiClient {
       ...options,
     };
 
+    // Always send token if exists
+    if (this.token) {
+      config.headers.Authorization = `Bearer ${this.token}`;
+    }
+
+
     if (config.body && typeof config.body === "object") {
       config.body = JSON.stringify(config.body);
     }
@@ -20,19 +44,41 @@ class ApiClient {
     return data;
   }
 
-  // 🔥 CORRECT BACKEND ROUTES
+  // ==========================================
+  // AUTH ROUTES
+  // ==========================================
+  async signup(payload) {
+    return this.request("/auth/signup", {
+      method: "POST",
+      body: payload,
+    });
+  }
 
-  // Get ALL locations
+  async login(payload) {
+    const result = await this.request("/auth/login", {
+      method: "POST",
+      body: payload,
+    });
+
+    if (result?.token) {
+      this.setToken(result.token);
+    }
+
+    return result;
+  }
+
+  // ==========================================
+  // LOCATION ROUTES (Protected)
+  // ==========================================
   async getLocations() {
     return this.request("/locations");
   }
 
-  // Get location by ID
+  // ✅ REQUIRED FOR MAGIC PHRASES
   async getLocation(id) {
     return this.request(`/locations/${id}`);
   }
 
-  // Add new location
   async createLocation(location) {
     return this.request("/locations", {
       method: "POST",
@@ -40,34 +86,15 @@ class ApiClient {
     });
   }
 
-  // Update location
-  async updateLocation(id, location) {
-    return this.request(`/locations/${id}`, {
-      method: "PUT",
-      body: location,
-    });
-  }
-
-  // Delete location
   async deleteLocation(id) {
     return this.request(`/locations/${id}`, {
       method: "DELETE",
     });
   }
 
-  // 🔥 SEARCH using backend
-  async searchLocations(query) {
-    return this.request(`/locations/search/${encodeURIComponent(query)}`);
-  }
-
-  // 🔥 FIND by name using backend
-  async findLocationByName(name) {
-    return this.request(`/locations/name/${encodeURIComponent(name)}`);
-  }
-
-  // -------------------------------
-  // MAGIC PHRASES (unchanged)
-  // -------------------------------
+  // ==========================================
+  // MAGIC PHRASES (Protected)
+  // ==========================================
   async getPhrases() {
     return this.request("/phrases");
   }
@@ -85,7 +112,6 @@ class ApiClient {
     });
   }
 
-  // Match spoken phrase
   async findPhraseMatch({ phrase }) {
     return this.request("/phrases/match", {
       method: "POST",

@@ -3,40 +3,38 @@ const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
 class LocationService {
-  static async createLocation(data) {
-    // Validate required fields
+  static async createLocation(data, userId) {
     if (!data.location_name || !data.latitude || !data.longitude) {
       throw new Error('location_name, latitude, and longitude are required');
     }
 
-    // Validate latitude
     if (data.latitude < -90 || data.latitude > 90) {
       throw new Error('Latitude must be between -90 and 90');
     }
 
-    // Validate longitude
     if (data.longitude < -180 || data.longitude > 180) {
       throw new Error('Longitude must be between -180 and 180');
     }
 
-    // Check for duplicate name
-    const existing = await Location.findByName(data.location_name);
+    const existing = await Location.findByName(data.location_name, userId);
     if (existing) {
       throw new Error('Location with this name already exists');
     }
 
-    // Normalize tags
     const tags = Array.isArray(data.tags) ? data.tags : [];
 
-    return await Location.create({
-      ...data,
-      tags,
-      notes: data.notes || '',
-    });
+    return await Location.create(
+      {
+        ...data,
+        tags,
+        notes: data.notes || '',
+      },
+      userId
+    );
   }
 
-  static async getAllLocations() {
-    return await Location.findAll();
+  static async getAllLocations(userId) {
+    return await Location.findAll(userId);
   }
 
   static async getLocationById(id) {
@@ -47,8 +45,8 @@ class LocationService {
     return location;
   }
 
-  static async updateLocation(id, data) {
-    const existing = await Location.findById(id);
+  static async updateLocation(id, data, userId) {
+    const existing = await Location.findById(id, userId);
     if (!existing) {
       throw new Error('Location not found');
     }
@@ -65,7 +63,7 @@ class LocationService {
 
     // Check for duplicate name if name is being changed
     if (data.location_name && data.location_name !== existing.location_name) {
-      const duplicate = await Location.findByName(data.location_name);
+      const duplicate = await Location.findByName(data.location_name, userId);
       if (duplicate) {
         throw new Error('Location with this name already exists');
       }
@@ -82,15 +80,15 @@ class LocationService {
       longitude: data.longitude !== undefined ? data.longitude : existing.longitude,
       tags: data.tags !== undefined ? data.tags : existing.tags,
       notes: data.notes !== undefined ? data.notes : existing.notes,
-    });
+    }, userId);
   }
 
-  static async deleteLocation(id) {
-    const location = await Location.findById(id);
+  static async deleteLocation(id, userId) {
+    const location = await Location.findById(id, userId);
     if (!location) {
       throw new Error('Location not found');
     }
-    return await Location.delete(id);
+    return await Location.delete(id, userId);
   }
 
   static async searchLocations(query) {

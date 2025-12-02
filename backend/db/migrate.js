@@ -1,16 +1,29 @@
-const pool = require('./config');
+require("dotenv").config();
+const pool = require("./config");
 
 async function runMigrations() {
   const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
 
-    // Create locations table
+  try {
+    await client.query("BEGIN");
+
+    // 1️⃣ USERS TABLE (required for JWT)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 2️⃣ LOCATIONS TABLE (with user_id)
     await client.query(`
       CREATE TABLE IF NOT EXISTS locations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        location_name TEXT UNIQUE NOT NULL,
+        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        location_name TEXT NOT NULL,
         latitude DOUBLE PRECISION NOT NULL,
         longitude DOUBLE PRECISION NOT NULL,
         tags TEXT[] DEFAULT '{}',
@@ -22,33 +35,35 @@ async function runMigrations() {
       )
     `);
 
-    // Create magic_phrases table
+    // index for location search
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_locations_name
+      ON locations(location_name)
+    `);
+
+    // 3️⃣ MAGIC_PHRASES TABLE (with user_id + location FK)
     await client.query(`
       CREATE TABLE IF NOT EXISTS magic_phrases (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        phrase TEXT UNIQUE NOT NULL,
+        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        phrase TEXT NOT NULL,
         action_type TEXT NOT NULL DEFAULT 'navigate',
         target_location_id UUID REFERENCES locations(id) ON DELETE CASCADE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Create index on location_name for faster searches
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_locations_name ON locations(location_name)
+      CREATE INDEX IF NOT EXISTS idx_phrases_phrase
+      ON magic_phrases(phrase)
     `);
 
-    // Create index on phrase for faster searches
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_phrases_phrase ON magic_phrases(phrase)
-    `);
+    await client.query("COMMIT");
 
-    await client.query('COMMIT');
-    console.log('✅ Migrations completed successfully');
+    console.log("✅ Database migrations completed!");
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ Migration failed:', error);
-    throw error;
+    await client.query("ROLLBACK");
+    console.error("❌ Migration failed:", error);
   } finally {
     client.release();
   }
@@ -56,11 +71,10 @@ async function runMigrations() {
 
 runMigrations()
   .then(() => {
-    console.log('Database setup complete');
+    console.log("Database setup complete");
     process.exit(0);
   })
   .catch((error) => {
-    console.error('Database setup failed:', error);
+    console.error("Database setup failed:", error);
     process.exit(1);
   });
-

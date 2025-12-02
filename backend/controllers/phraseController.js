@@ -1,9 +1,10 @@
 const PhraseService = require('../services/phraseService');
 
 class PhraseController {
+
   static async create(req, res) {
     try {
-      const phrase = await PhraseService.createPhrase(req.body);
+      const phrase = await PhraseService.createPhrase(req.body, req.userId);
       res.status(201).json({
         status: 'success',
         data: phrase,
@@ -20,7 +21,7 @@ class PhraseController {
 
   static async getAll(req, res) {
     try {
-      const phrases = await PhraseService.getAllPhrases();
+      const phrases = await PhraseService.getAllPhrases(req.userId);
       res.status(200).json({
         status: 'success',
         data: phrases,
@@ -37,7 +38,7 @@ class PhraseController {
 
   static async delete(req, res) {
     try {
-      await PhraseService.deletePhrase(req.params.id);
+      await PhraseService.deletePhrase(req.params.id, req.userId);
       res.status(200).json({
         status: 'success',
         data: null,
@@ -54,4 +55,3 @@ class PhraseController {
 }
 
 module.exports = PhraseController;
-

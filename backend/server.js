@@ -1,12 +1,12 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const locationRoutes = require('./routes/locationRoutes');
-const phraseRoutes = require('./routes/phraseRoutes');
-const apiRoutes = require('./routes/apiRoutes');
-//apenai
-const aiRoutes = require('./routes/aiRoutes');
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
 
+const locationRoutes = require("./routes/locationRoutes");
+const phraseRoutes = require("./routes/phraseRoutes");
+const apiRoutes = require("./routes/apiRoutes");
+const aiRoutes = require("./routes/aiRoutes");
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -16,37 +16,37 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'VESNS API is running' });
+// Health Route
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", message: "VESNS API running" });
 });
 
-// Routes
-app.use('/locations', locationRoutes);
-app.use('/phrases', phraseRoutes);
-app.use('/api', apiRoutes);
-app.use('/ai', aiRoutes);
+// ===== ROUTES =====
+app.use("/auth", authRoutes);          // 🔥 IMPORTANT
+app.use("/locations", locationRoutes); // 🔥 Protected later
+app.use("/phrases", phraseRoutes);     // 🔥 Protected
+app.use("/api", apiRoutes);
+app.use("/ai", aiRoutes);
 
-// Error handling middleware
+// Error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error("Error:", err);
   res.status(500).json({
-    status: 'error',
+    status: "error",
     data: null,
-    message: 'Internal server error',
+    message: "Internal server error",
   });
 });
 
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
-    status: 'error',
+    status: "error",
     data: null,
-    message: 'Route not found',
+    message: "Route not found",
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 VESNS Backend server running on http://localhost:${PORT}`);
+  console.log(`🚀 VESNS Backend running at http://localhost:${PORT}`);
 });
-

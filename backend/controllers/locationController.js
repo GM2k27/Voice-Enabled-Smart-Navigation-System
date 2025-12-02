@@ -3,7 +3,7 @@ const LocationService = require('../services/locationService');
 class LocationController {
   static async create(req, res) {
     try {
-      const location = await LocationService.createLocation(req.body);
+      const location = await LocationService.createLocation(req.body, req.userId);
       res.status(201).json({
         status: 'success',
         data: location,
@@ -20,7 +20,7 @@ class LocationController {
 
   static async getAll(req, res) {
     try {
-      const locations = await LocationService.getAllLocations();
+      const locations = await LocationService.getAllLocations(req.userId);
       res.status(200).json({
         status: 'success',
         data: locations,
@@ -37,7 +37,7 @@ class LocationController {
 
   static async getById(req, res) {
     try {
-      const location = await LocationService.getLocationById(req.params.id);
+      const location = await LocationService.getLocationById(req.params.id, req.userId);
       res.status(200).json({
         status: 'success',
         data: location,
@@ -54,7 +54,7 @@ class LocationController {
 
   static async update(req, res) {
     try {
-      const location = await LocationService.updateLocation(req.params.id, req.body);
+      const location = await LocationService.updateLocation(req.params.id, req.body, req.userId);
       res.status(200).json({
         status: 'success',
         data: location,
@@ -72,7 +72,7 @@ class LocationController {
 
   static async delete(req, res) {
     try {
-      await LocationService.deleteLocation(req.params.id);
+      await LocationService.deleteLocation(req.params.id, req.userId);
       res.status(200).json({
         status: 'success',
         data: null,

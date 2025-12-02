@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Groq = require("groq-sdk");
+const auth = require("../middleware/authMiddleware");
 
 // LLaMA client
 const client = new Groq({

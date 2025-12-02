@@ -27,39 +27,60 @@ async function extractLocation(spokenRaw = "") {
   const spoken = spokenRaw.toLowerCase().trim();
   const normalized = normalizeText(spoken);
 
-  // 1) Magic Phrase
+  // 0) detect "navigate to / go to / take me to / directions to"
+  let stripped = normalized;
+  let hasNavPrefix = false;
+
+  for (const p of navigationPatterns) {
+    if (normalized.startsWith(p)) {
+      stripped = normalizeText(normalized.slice(p.length));
+      hasNavPrefix = true;
+      break;
+    }
+  }
+
+  // prefer location text without the command words
+  const candidates = [];
+  if (hasNavPrefix && stripped.length > 0) candidates.push(stripped);
+  if (!candidates.includes(normalized)) candidates.push(normalized);
+
+  // 1) 🔥 MAGIC PHRASE FIRST (try all candidates)
+  for (const text of candidates) {
+    try {
+      const phrase = await api.findPhraseMatch({ phrase: text });
+      if (phrase?.status === "success" && phrase.data?.target_location_id) {
+        // phrase.data already has location_name, latitude, longitude
+        return { type: "magic_location", location: phrase.data };
+      }
+    } catch { }
+  }
+
+  // 2) EXACT SAVED NAME (using stripped if present)
   try {
-    const phrase = await api.findPhraseMatch({ phrase: normalized });
-    if (phrase?.status === "success" && phrase.data?.target_location_id) {
-      const loc = await api.getLocation(phrase.data.target_location_id);
-      if (loc?.status === "success" && loc.data) {
-        return { type: "saved_location", location: loc.data };
+    const nameQuery = hasNavPrefix ? stripped : normalized;
+    if (nameQuery.length > 0 && api.findLocationByName) {
+      const found = await api.findLocationByName(nameQuery);
+      if (found?.status === "success" && found.data) {
+        return { type: "saved_location", location: found.data };
       }
     }
   } catch { }
 
-  // 2) Exact Saved
+  // 3) PARTIAL DB MATCH
   try {
-    const found = await api.findLocationByName(normalized);
-    if (found?.status === "success" && found.data) {
-      return { type: "saved_location", location: found.data };
+    const searchQuery = hasNavPrefix ? stripped : normalized;
+    if (searchQuery.length > 0 && api.searchLocations) {
+      const res = await api.searchLocations(searchQuery);
+      if (res?.status === "success" && res.data.length > 0) {
+        return { type: "saved_location", location: res.data[0] };
+      }
     }
   } catch { }
 
-  // 3) Partial in DB
-  try {
-    const res = await api.searchLocations(normalized);
-    if (res?.status === "success" && res.data.length > 0) {
-      return { type: "saved_location", location: res.data[0] };
-    }
-  } catch { }
-
-  // 4) Navigation phrase “navigate to X”
-  for (const p of navigationPatterns) {
-    if (normalized.includes(p)) {
-      const q = normalized.replace(p, "").trim();
-      if (q.length > 1) return { type: "geocode", query: q };
-    }
+  // 4) 🌍 Geocode ONLY IF navigation phrase detected and NO saved hit
+  if (hasNavPrefix) {
+    if (stripped.trim().length < 2) return null; // prevents empty geocode call
+    return { type: "geocode", query: stripped };
   }
 
   // 5) Zoom
@@ -137,6 +158,7 @@ export default function Page() {
           toast.success("Zoomed In");
           return;
         }
+
         if (locData.type === "zoom_out") {
           mapRef.current.zoomOut();
           toast.success("Zoomed Out");
@@ -146,15 +168,32 @@ export default function Page() {
         // ---- NAVIGATION ----
         let lat, lon, label;
 
-        if (locData.type === "saved_location") {
+        if (locData.type === "magic_location") {
+          lat = Number(locData.location.latitude);
+          lon = Number(locData.location.longitude);
+          label = locData.location.location_name || locData.location.phrase;
+
+        } else if (locData.type === "saved_location") {
           lat = Number(locData.location.latitude);
           lon = Number(locData.location.longitude);
           label = locData.location.location_name;
-        } else {
+
+        } else if (locData.type === "geocode") {
+
+          // ❌ Prevent empty or invalid geocode
+          if (!locData.query || locData.query.trim().length < 2) {
+            toast.error("Say a proper location");
+            return;
+          }
+
           const geo = await geocodeLocation(locData.query);
           lat = geo.lat;
           lon = geo.lon;
           label = geo.label;
+
+        } else {
+          toast.error("Unknown location type");
+          return;
         }
 
         if (!isFinite(lat) || !isFinite(lon)) throw new Error("Invalid coordinates");
@@ -175,6 +214,7 @@ export default function Page() {
 
         setStatus(`Showing: ${label}`);
         toast.success(`Navigating to ${label}`);
+
       } catch (err) {
         console.error(err);
         toast.error("Cannot show location");
@@ -198,6 +238,15 @@ export default function Page() {
     const rec = new SR();
     rec.lang = "en-US";
     rec.interimResults = false;
+    rec.continuous = true;
+    rec.maxAlternatives = 1;
+
+    // 🔥 Allow 1.2 seconds pause before ending
+    rec.onspeechend = () => {
+      setTimeout(() => {
+        if (!aiActive) rec.stop();
+      }, 1200);
+    };
 
     rec.onstart = () => setIsListening(true);
     rec.onend = () => setIsListening(false);
